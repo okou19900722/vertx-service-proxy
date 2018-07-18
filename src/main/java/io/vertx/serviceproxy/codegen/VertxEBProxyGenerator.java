@@ -3,9 +3,11 @@ package io.vertx.serviceproxy.codegen;
 import io.vertx.codegen.MethodInfo;
 import io.vertx.codegen.ParamInfo;
 import io.vertx.codegen.TypeParamInfo;
+import io.vertx.codegen.type.ApiTypeInfo;
 import io.vertx.codegen.type.ClassKind;
 import io.vertx.codegen.type.ParameterizedTypeInfo;
 import io.vertx.codegen.type.TypeInfo;
+import io.vertx.codetrans.expression.ApiModel;
 import io.vertx.serviceproxy.model.ProxyMethodInfo;
 import io.vertx.serviceproxy.model.ProxyModel;
 
@@ -32,11 +34,7 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
     writer.println();
     genImports(model, writer);
     writer.println();
-    //TODO 添加星号
-    writer.println("/*");
-    writer.println("  Generated Proxy code - DO NOT EDIT");
-    writer.println("  @author Roger the Robot");
-    writer.println("*/");
+    genComment(writer);
     writer.println("@SuppressWarnings({\"unchecked\", \"rawtypes\"})");
 
     String simpleName = model.getIfaceSimpleName();
@@ -148,7 +146,7 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
     writer.println("  private <T> Set<T> convertSet(List list) {");
     writer.println("    return new HashSet<T>(convertList(list));");
     writer.println("  }");
-    writer.println("}");
+    writer.print("}");
     return sw.toString();
   }
   private void genMethodBody(ProxyMethodInfo method, PrintWriter writer){
@@ -156,21 +154,27 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
     ParamInfo lastParam = hasParams ? method.getParams().get(method.getParams().size() - 1) : null;
     boolean hasResultHandler = lastParam != null && lastParam.getType().getKind() == ClassKind.HANDLER && ((ParameterizedTypeInfo)lastParam.getType()).getArg(0).getKind() == ClassKind.ASYNC_RESULT;
     int count = 0;
+    writer.print("  ");
     if (hasResultHandler) {
       writer.println("  if (closed) {");
       writer.print("    ");
       writer.print(lastParam.getName());
       writer.println(".handle(Future.failedFuture(new IllegalStateException(\"Proxy is closed\")));");
+      writer.print("  ");
       if (method.isFluent()) {
         writer.println("    return this;");
+        writer.print("  ");
       } else {
         writer.println("    return;");
+        writer.print("  ");
       }
       writer.println("  }");
+      writer.print("  ");
     } else {
       writer.println("  if (closed) {");
       writer.println("    throw new IllegalStateException(\"Proxy is closed\");");
       writer.println("  }");
+      writer.print("  ");
     }
     if (method.isProxyClose()) {
       writer.println("  closed = true;");
@@ -193,13 +197,13 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
           if (argKind == ClassKind.DATA_OBJECT) {
             genJsonPut(param, writer, () -> {
               StringBuilder sb = new StringBuilder();
-              sb.append("new JsonArray(").append(param.getName()).append(".stream().map(r -> r == null ? null : r.toJson()).collect(Collectors.toList())));");
+              sb.append("new JsonArray(").append(param.getName()).append(".stream().map(r -> r == null ? null : r.toJson()).collect(Collectors.toList()))");
               return sb.toString();
             });
           } else {
             genJsonPut(param, writer, () -> {
               StringBuilder sb = new StringBuilder();
-              sb.append("new JsonArray(").append(param.getName()).append("));");
+              sb.append("new JsonArray(").append(param.getName()).append(")");
               return sb.toString();
             });
           }
@@ -210,13 +214,13 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
           if (argKind == ClassKind.DATA_OBJECT) {
             genJsonPut(param, writer, () -> {
               StringBuilder sb = new StringBuilder();
-              sb.append("new JsonArray(").append(param.getName()).append(".stream().map(r -> r == null ? null : r.toJson()).collect(Collectors.toList())));");
+              sb.append("new JsonArray(").append(param.getName()).append(".stream().map(r -> r == null ? null : r.toJson()).collect(Collectors.toList()))");
               return sb.toString();
             });
           } else {
             genJsonPut(param, writer, () -> {
               StringBuilder sb = new StringBuilder();
-              sb.append("new JsonArray(new ArrayList<>(").append(param.getName()).append(")));");
+              sb.append("new JsonArray(new ArrayList<>(").append(param.getName()).append("))");
               return sb.toString();
             });
           }
@@ -228,35 +232,98 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
           genJsonPut(param, writer, param::getName);
         }
       }
-      writer.println("    DeliveryOptions _deliveryOptions = (_options != null) ? new DeliveryOptions(_options) : new DeliveryOptions();");
-      writer.print("    _deliveryOptions.addHeader(\"action\", \"");
-      writer.print(method.getName());
-      writer.println("\");");
-      if (hasResultHandler) {
-        TypeInfo resultType = ((ParameterizedTypeInfo)((ParameterizedTypeInfo) lastParam.getType()).getArg(0)).getArg(0);
-        ClassKind resultKind = resultType.getKind();
-        writer.print("    _vertx.eventBus().");
-        if (resultKind == ClassKind.LIST || resultKind == ClassKind.SET) {
-          writer.print("<JsonArray>");
-        } else if (resultKind == ClassKind.DATA_OBJECT) {
-          writer.print("<JsonObject>");
-        } else if (resultKind == ClassKind.ENUM) {
-          writer.print("<String>");
-        } else {
-          writer.print("<");
-          writer.print(resultType.getSimpleName());
-          writer.println(">");
-        }
-        writer.println("send(_address, _json, _deliveryOptions, res -> {");
-        writer.println("      if (res.failed()) {");
+    }
+    writer.println("    DeliveryOptions _deliveryOptions = (_options != null) ? new DeliveryOptions(_options) : new DeliveryOptions();");
+    writer.print("    _deliveryOptions.addHeader(\"action\", \"");
+    writer.print(method.getName());
+    writer.println("\");");
+    if (hasResultHandler) {
+      TypeInfo resultType = ((ParameterizedTypeInfo)((ParameterizedTypeInfo) lastParam.getType()).getArg(0)).getArg(0);
+      ClassKind resultKind = resultType.getKind();
+      writer.print("    _vertx.eventBus().");
+      if (resultKind == ClassKind.LIST || resultKind == ClassKind.SET) {
+        writer.print("<JsonArray>");
+      } else if (resultKind == ClassKind.DATA_OBJECT) {
+        writer.print("<JsonObject>");
+      } else if (resultKind == ClassKind.ENUM) {
+        writer.print("<String>");
+      } else {
+        writer.print("<");
+        writer.print(resultType.getSimpleName());
+        writer.print(">");
+      }
+      writer.println("send(_address, _json, _deliveryOptions, res -> {");
+      writer.println("      if (res.failed()) {");
+      writer.print("        ");
+      writer.print(lastParam.getName());
+      writer.println(".handle(Future.failedFuture(res.cause()));");
+      writer.println("      } else {");
+      if (resultKind == ClassKind.LIST) {
+        genCollect(resultType, lastParam, "List", writer);
+      } else if (resultKind == ClassKind.SET) {
+        genCollect(resultType, lastParam, "Set", writer);
+      } else if (resultKind == ClassKind.API && ((ApiTypeInfo)resultType).isProxyGen()) {
+        writer.println("        String addr = res.result().headers().get(\"proxyaddr\");");
         writer.print("        ");
         writer.print(lastParam.getName());
-        writer.println(".handle(Future.failedFuture(res.cause()));");
-        writer.println("      } else {");
-        if (resultKind == ClassKind.LIST) {
-
-        }
+        writer.print(".handle(Future.succeededFuture(ProxyHelper.createProxy(");
+        writer.print(resultType.getSimpleName());
+        writer.println(".class, _vertx, addr)));");
+      } else if (resultKind == ClassKind.DATA_OBJECT) {
+        writer.print("        ");
+        writer.print(lastParam.getName());
+        writer.print(".handle(Future.succeededFuture(res.result().body() == null ? null : new ");
+        writer.print(resultType.getSimpleName());
+        writer.println("(res.result().body())));");
+        //TODO 这行疑是多的
+        writer.print("                ");
+      } else if (resultKind == ClassKind.ENUM) {
+        writer.print("        ");
+        writer.print(lastParam.getName());
+        writer.print(".handle(Future.succeededFuture(res.result().body() == null ? null : ");
+        writer.print(resultType.getSimpleName());
+        writer.println(".valueOf(res.result().body())));");
+      } else {
+        writer.print("        ");
+        writer.print(lastParam.getName());
+        writer.println(".handle(Future.succeededFuture(res.result().body()));");
       }
+      writer.println("      }");
+      writer.println("    });");
+    } else {
+      writer.println("    _vertx.eventBus().send(_address, _json, _deliveryOptions);");
+    }
+  }
+
+  private void genCollect(TypeInfo resultType, ParamInfo lastParam, String collectType, PrintWriter writer){
+    ParameterizedTypeInfo parameterizedReturnType = (ParameterizedTypeInfo) resultType;
+    TypeInfo arg = parameterizedReturnType.getArg(0);
+    if (arg.getName().equals("java.lang.Character")) {
+      writer.print("        ");
+      writer.print(lastParam.getName());
+      writer.print(".handle(Future.succeededFuture(convertTo");
+      writer.print(collectType);
+      writer.println("Char(res.result().body())));");
+    } else if (arg.getKind() == ClassKind.DATA_OBJECT) {
+      writer.print("        ");
+      writer.print(lastParam.getName());
+      writer.println(".handle(Future.succeededFuture(res.result().body().stream()");
+      writer.println("            .map(o -> { if (o == null) return null;");
+      writer.print("                        return o instanceof Map ? new ");
+      writer.print(arg.getSimpleName());
+      writer.print("(new JsonObject((Map) o)) : new ");
+      writer.print(arg.getSimpleName());
+      writer.println("((JsonObject) o);");
+      writer.println("                 })");
+      writer.print("            .collect(Collectors.to");
+      writer.print(collectType);
+      writer.println("())));");
+    } else {
+      writer.print("        ");
+      writer.print(lastParam.getName());
+      writer.print(".handle(Future.succeededFuture(convert");
+      writer.print(collectType);
+      writer.println("(res.result().body().getList())));");
     }
   }
   private void genJsonPut(ParamInfo param, PrintWriter writer, Supplier<String> supplier){
@@ -264,7 +331,7 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
     writer.print("    _json.put(\"");
     writer.print(paramName);
     writer.print("\", ");
-    supplier.get();
+    writer.print(supplier.get());
     writer.println(");");
   }
   private Supplier<String> getCaseSupplier(ParamInfo param, boolean nullable, String paramType){
@@ -300,7 +367,7 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
     writer.print(method.getName());
     writer.print("(");
     writer.print(method.getParams().stream().map(param -> param.getType().getSimpleName() + " " + param.getName()).collect(Collectors.joining(", ")));
-    writer.print(") {");
+    writer.println(") {");
   }
 
   private void genImports(ProxyModel model, PrintWriter writer){
@@ -322,12 +389,6 @@ class VertxEBProxyGenerator extends AbstractServiceProxyGenerator{
     writer.println("import io.vertx.serviceproxy.ProxyHelper;");
     writer.println("import io.vertx.serviceproxy.ServiceException;");
     writer.println("import io.vertx.serviceproxy.ServiceExceptionMessageCodec;");
-    for (TypeInfo importedType : model.getImportedTypes()) {
-      if (!importedType.getRaw().getPackageName().equals("java.lang")) {
-        writer.print("import ");
-        writer.print(importedType.toString());
-        writer.println(";");
-      }
-    }
+    genImportedTypes(model, writer);
   }
 }
